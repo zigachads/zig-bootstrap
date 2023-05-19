@@ -1,0 +1,11 @@
+out/
+out-win/
+out-win-x86/
+zig-cache/
+zig-out/
+/zig/
+/zstd/
+/llvm/
+/clang/
+/lld/
+/zlib/
