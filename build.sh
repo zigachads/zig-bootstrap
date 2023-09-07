@@ -2,11 +2,12 @@
 
 set -eu
 
-TARGET="$1" # Example: riscv64-linux-gnu
-MCPU="$2" # Examples: `baseline`, `native`, `generic+v7a`, or `arm1176jzf_s`
+TARGET=${TARGET:-"x86_64-linux-musl"}
+MCPU=${MCPU:-"baseline"}
+LLVM_PROJECTS=${LLVM_PROJECTS:-"lld;clang"}
 
 ROOTDIR="$(pwd)"
-ZIG_VERSION="0.11.0-dev.2680+a1aa55ebe"
+ZIG_VERSION="0.12.0-dev.280+64d03faae"
 
 TARGET_OS_AND_ABI=${TARGET#*-} # Example: linux-gnu
 
@@ -15,6 +16,8 @@ TARGET_OS_CMAKE=${TARGET_OS_AND_ABI%-*} # Example: linux
 case $TARGET_OS_CMAKE in
   macos) TARGET_OS_CMAKE="Darwin";;
   freebsd) TARGET_OS_CMAKE="FreeBSD";;
+	netbsd) TARGET_OS_CMAKE="NetBSD";;
+  openbsd) TARGET_OS_CMAKE="FreeBSD";;
   windows) TARGET_OS_CMAKE="Windows";;
   linux) TARGET_OS_CMAKE="Linux";;
   native) TARGET_OS_CMAKE="";;
@@ -23,7 +26,7 @@ esac
 # First build the libraries for Zig to link against, as well as native `llvm-tblgen`.
 mkdir -p "$ROOTDIR/out/build-llvm-host"
 cd "$ROOTDIR/out/build-llvm-host"
-cmake "$ROOTDIR/llvm" \
+cmake "$ROOTDIR/llvm-project/llvm" \
 	-G Ninja \
 	-DLLVM_PARALLEL_LINK_JOBS=2 \
   -DCMAKE_INSTALL_PREFIX="$ROOTDIR/out/host" \
@@ -73,8 +76,10 @@ ZIG="$ROOTDIR/out/host/bin/zig"
 # the final zig binary to have zlib support enabled.
 mkdir -p "$ROOTDIR/out/build-zlib-$TARGET-$MCPU"
 cd "$ROOTDIR/out/build-zlib-$TARGET-$MCPU"
-cmake "$ROOTDIR/zlib" \
+cmake "$ROOTDIR/zlib-ng" \
 	-G Ninja \
+	-DZLIB_COMPAT=ON \
+	-DBUILD_SHARED_LIBS=OFF \
   -DCMAKE_INSTALL_PREFIX="$ROOTDIR/out/$TARGET-$MCPU" \
   -DCMAKE_PREFIX_PATH="$ROOTDIR/out/$TARGET-$MCPU" \
   -DCMAKE_BUILD_TYPE=MinSizeRel \
@@ -136,7 +141,7 @@ $ZIG build-lib \
 # Rebuild LLVM with Zig.
 mkdir -p "$ROOTDIR/out/build-llvm-$TARGET-$MCPU"
 cd "$ROOTDIR/out/build-llvm-$TARGET-$MCPU"
-cmake "$ROOTDIR/llvm" \
+cmake "$ROOTDIR/llvm-project/llvm" \
 	-DLLVM_PARALLEL_LINK_JOBS=2 \
 	-G Ninja \
   -DCMAKE_INSTALL_PREFIX="$ROOTDIR/out/$TARGET-$MCPU" \
@@ -158,16 +163,17 @@ cmake "$ROOTDIR/llvm" \
   -DLLVM_ENABLE_LIBXML2=OFF \
   -DLLVM_ENABLE_OCAMLDOC=OFF \
   -DLLVM_ENABLE_PLUGINS=OFF \
-  -DLLVM_ENABLE_PROJECTS="lld;clang" \
+  -DLLVM_ENABLE_PROJECTS="$LLVM_PROJECTS" \
   -DLLVM_ENABLE_TERMINFO=OFF \
   -DLLVM_ENABLE_Z3_SOLVER=OFF \
   -DLLVM_ENABLE_ZLIB=FORCE_ON \
   -DLLVM_ENABLE_ZSTD=FORCE_ON \
   -DLLVM_USE_STATIC_ZSTD=ON \
   -DLLVM_TABLEGEN="$ROOTDIR/out/host/bin/llvm-tblgen" \
-  -DLLVM_BUILD_TOOLS=OFF \
+  -DLLVM_BUILD_TOOLS=ON \
   -DLLVM_BUILD_STATIC=ON \
-  -DLLVM_INCLUDE_UTILS=OFF \
+  -DLLVM_INCLUDE_UTILS=ON \
+	-DLLVM_INSTALL_UTILS=ON \
   -DLLVM_INCLUDE_TESTS=OFF \
   -DLLVM_INCLUDE_EXAMPLES=OFF \
   -DLLVM_INCLUDE_BENCHMARKS=OFF \
@@ -178,7 +184,7 @@ cmake "$ROOTDIR/llvm" \
   -DLLVM_TOOL_LTO_BUILD=ON \
   -DLLVM_TOOL_REMARKS_SHLIB_BUILD=OFF \
   -DCLANG_TABLEGEN="$ROOTDIR/out/build-llvm-host/bin/clang-tblgen" \
-  -DCLANG_BUILD_TOOLS=OFF \
+  -DCLANG_BUILD_TOOLS=ON \
   -DCLANG_INCLUDE_DOCS=OFF \
   -DCLANG_INCLUDE_TESTS=OFF \
   -DCLANG_ENABLE_ARCMT=ON \
@@ -187,7 +193,7 @@ cmake "$ROOTDIR/llvm" \
   -DCLANG_TOOL_C_INDEX_TEST_BUILD=OFF \
   -DCLANG_TOOL_ARCMT_TEST_BUILD=OFF \
   -DCLANG_TOOL_C_ARCMT_TEST_BUILD=OFF \
-  -DCLANG_TOOL_LIBCLANG_BUILD=OFF \
+  -DCLANG_TOOL_LIBCLANG_BUILD=ON \
   -DLIBCLANG_BUILD_STATIC=ON
 cmake --build . --target install
 
